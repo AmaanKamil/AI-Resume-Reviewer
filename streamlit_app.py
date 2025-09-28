@@ -178,9 +178,9 @@ from PyPDF2 import PdfReader
 import io
 
 # Configuration - Replace with your actual values
-LANGFLOW_URL = "http://localhost:7860"  # Replace with your LangFlow URL
-FLOW_ID = "87515769-614a-402f-930f-6455a49bccba"           # Replace with your Flow ID
-API_KEY = "sk-Db8YhDdknWt0AOEZWzOD02UMJKNyMWehx1WmmfwhJpU"           # Replace with your API Key
+LANGFLOW_URL = st.secrets["LANGFLOW_URL"]
+FLOW_ID = st.secrets["FLOW_ID"] 
+API_KEY = st.secrets["API_KEY"] 
 
 def extract_text_from_pdf(pdf_file):
     """Extract text from uploaded PDF file using PyPDF2"""
