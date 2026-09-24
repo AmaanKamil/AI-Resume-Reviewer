@@ -209,7 +209,7 @@ def find_secret(name):
 
 
 def get_client():
-    api_key = find_secret("OPENAI_API_KEY")
+    api_key = find_secret("OPENAI_API_KEY") or find_secret("API_KEY")
     if not api_key:
         return None
     return OpenAI(api_key=api_key, timeout=120, max_retries=2)
@@ -488,7 +488,7 @@ st.markdown(
 
 client = get_client()
 if client is None:
-    st.error("The reviewer isn't configured yet (missing `OPENAI_API_KEY` in the app's secrets). Please check back soon.")
+    st.error("The reviewer isn't configured yet (missing `OPENAI_API_KEY` / `API_KEY` in the app's secrets). Please check back soon.")
     st.stop()
 
 with st.form("review_form", border=False):
