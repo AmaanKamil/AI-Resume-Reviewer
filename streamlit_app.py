@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import re
 from datetime import date
 
@@ -194,8 +195,21 @@ scores.* are 0-10; overall_score is 0-100. \
 If no job description is given, return jd_match with match_percent 0 and empty arrays."""
 
 
+def find_secret(name):
+    """Look up a secret at the top level, inside any [section], or in the environment."""
+    try:
+        if st.secrets.get(name):
+            return str(st.secrets[name]).strip()
+        for value in st.secrets.values():
+            if hasattr(value, "get") and value.get(name):
+                return str(value[name]).strip()
+    except Exception:
+        pass
+    return os.environ.get(name, "").strip() or None
+
+
 def get_client():
-    api_key = st.secrets.get("OPENAI_API_KEY")
+    api_key = find_secret("OPENAI_API_KEY")
     if not api_key:
         return None
     return OpenAI(api_key=api_key, timeout=120, max_retries=2)
@@ -209,7 +223,7 @@ def analyse_resume(_client, resume_text, target_role, job_description):
         user_parts.append(f"JOB DESCRIPTION:\n{job_description.strip()[:MAX_JD_CHARS]}")
     user_parts.append(f"DOCUMENT:\n{resume_text[:MAX_RESUME_CHARS]}")
 
-    model = st.secrets.get("OPENAI_MODEL", DEFAULT_MODEL)
+    model = find_secret("OPENAI_MODEL") or DEFAULT_MODEL
     # GPT-5 family reasoning models only accept the default temperature.
     extra = {} if model.startswith(("gpt-5", "o")) else {"temperature": 0.3}
     response = _client.chat.completions.create(
