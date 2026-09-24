@@ -6,7 +6,14 @@ from datetime import date
 
 import streamlit as st
 from docx import Document
-from openai import OpenAI, OpenAIError
+from openai import (
+    AuthenticationError,
+    NotFoundError,
+    OpenAI,
+    OpenAIError,
+    PermissionDeniedError,
+    RateLimitError,
+)
 from pypdf import PdfReader
 
 st.set_page_config(
@@ -213,6 +220,19 @@ def get_client():
     if not api_key:
         return None
     return OpenAI(api_key=api_key, timeout=120, max_retries=2)
+
+
+def describe_openai_error(error):
+    """User-facing message that still tells the app owner what to fix."""
+    if isinstance(error, AuthenticationError):
+        return "The reviewer's API key was rejected by OpenAI (it may be invalid or revoked). Please check back soon."
+    if isinstance(error, PermissionDeniedError) or isinstance(error, NotFoundError):
+        return "The reviewer's AI model isn't available on this account right now. Please check back soon."
+    if isinstance(error, RateLimitError):
+        if "quota" in str(error).lower():
+            return "The reviewer has hit its usage limit for now. Please check back later."
+        return "Lots of people are using the reviewer right now. Please try again in a minute."
+    return "The AI service is busy or unavailable right now. Please try again in a minute."
 
 
 # Identical resume + role + JD within 24h is served from cache instead of re-billing the API.
@@ -526,16 +546,16 @@ if submitted:
         try:
             text = clean_text(extract_text(uploaded_file))
         except ValueError as e:
-            status.update(label="Couldn't read that file", state="error")
+            status.update(label="Couldn't read that file", state="error", expanded=True)
             st.error(str(e))
             st.stop()
         except Exception:
-            status.update(label="Couldn't read that file", state="error")
+            status.update(label="Couldn't read that file", state="error", expanded=True)
             st.error("We couldn't read that file - it may be corrupted. Try re-exporting it as a PDF or DOCX.")
             st.stop()
 
         if len(text) < MIN_TEXT_CHARS:
-            status.update(label="Not enough text found", state="error")
+            status.update(label="Not enough text found", state="error", expanded=True)
             st.warning(
                 "We couldn't find enough text in this file. If it's a scanned image or photo, "
                 "please upload a text-based PDF or DOCX (e.g. export from Word / Google Docs)."
@@ -546,12 +566,13 @@ if submitted:
         try:
             result = analyse_resume(client, text, target_role.strip(), job_description.strip())
         except json.JSONDecodeError:
-            status.update(label="Something went wrong", state="error")
+            status.update(label="Something went wrong", state="error", expanded=True)
             st.error("The review came back in an unexpected format. Please try again.")
             st.stop()
-        except OpenAIError:
-            status.update(label="Something went wrong", state="error")
-            st.error("The AI service is busy or unavailable right now. Please try again in a minute.")
+        except OpenAIError as e:
+            print(f"OpenAI error: {type(e).__name__}: {e}", flush=True)
+            status.update(label="Something went wrong", state="error", expanded=True)
+            st.error(describe_openai_error(e))
             st.stop()
 
         status.update(label="Review ready!", state="complete", expanded=False)
