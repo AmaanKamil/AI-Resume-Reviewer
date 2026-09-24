@@ -16,10 +16,11 @@ st.set_page_config(
 )
 
 MAX_FILE_MB = 5
-MAX_RESUME_CHARS = 30_000
-MAX_JD_CHARS = 8_000
+MAX_RESUME_CHARS = 15_000   # ~4 pages; keeps input tokens bounded
+MAX_JD_CHARS = 6_000
+MAX_OUTPUT_TOKENS = 5_000   # typical review uses ~2.5k; hard ceiling on cost per call
 MIN_TEXT_CHARS = 200
-DEFAULT_MODEL = "gpt-5.4-mini"
+DEFAULT_MODEL = "gpt-5.4-mini"  # mini tier to keep costs low
 
 SEVERITY_STYLE = {
     "high": ("#fde8e8", "#b42318", "High"),
@@ -200,7 +201,9 @@ def get_client():
     return OpenAI(api_key=api_key, timeout=120, max_retries=2)
 
 
-def analyse_resume(client, resume_text, target_role, job_description):
+# Identical resume + role + JD within 24h is served from cache instead of re-billing the API.
+@st.cache_data(ttl=86_400, max_entries=200, show_spinner=False)
+def analyse_resume(_client, resume_text, target_role, job_description):
     user_parts = [f"TARGET ROLE: {target_role.strip() or 'Not provided - infer it from the resume'}"]
     if job_description.strip():
         user_parts.append(f"JOB DESCRIPTION:\n{job_description.strip()[:MAX_JD_CHARS]}")
@@ -209,8 +212,9 @@ def analyse_resume(client, resume_text, target_role, job_description):
     model = st.secrets.get("OPENAI_MODEL", DEFAULT_MODEL)
     # GPT-5 family reasoning models only accept the default temperature.
     extra = {} if model.startswith(("gpt-5", "o")) else {"temperature": 0.3}
-    response = client.chat.completions.create(
+    response = _client.chat.completions.create(
         model=model,
+        max_completion_tokens=MAX_OUTPUT_TOKENS,
         response_format={"type": "json_object"},
         **extra,
         messages=[
@@ -526,7 +530,7 @@ if submitted:
 
         st.write("🧠 Comparing it against what hiring managers expect for the role...")
         try:
-            result = analyse_resume(client, text, target_role, job_description)
+            result = analyse_resume(client, text, target_role.strip(), job_description.strip())
         except json.JSONDecodeError:
             status.update(label="Something went wrong", state="error")
             st.error("The review came back in an unexpected format. Please try again.")
